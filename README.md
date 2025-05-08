@@ -1,2 +1,2 @@
-# pubsub-servis
-Publisher-Subcriber servis
+# pubsub-service
+Publisher-Subcriber service
