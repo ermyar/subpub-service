@@ -3,14 +3,16 @@ package main
 import (
 	// status "google. "
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	subpub "github.com/ermyar/subpub-service/cmd/subpub"
+	utils "github.com/ermyar/subpub-service/cmd/utils"
 	pb "github.com/ermyar/subpub-service/pkg/api/subpub"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -59,9 +61,9 @@ func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeS
 	})
 
 	if err == nil {
-		log.Println("Subscribed succesfully")
+		log.Println("Subscribed succesfully!")
 	} else {
-		log.Println("Subscribed with: ", err)
+		log.Println("Subscribed with:", err)
 	}
 
 	<-srConf.done
@@ -72,46 +74,45 @@ func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeS
 
 type serverConfig struct {
 	done chan struct{}
-	conf configJSON
-}
-
-// reading .json config
-type configJSON struct {
-	Port int `json:"port"`
-}
-
-func (c *serverConfig) readJSON(path string) (err error) {
-	var jsonFile []byte
-	jsonFile, err = os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(jsonFile, &c.conf)
-	return err
-}
-
-func (s *serverConfig) init(path string) error {
-	return s.readJSON(path)
+	conf utils.ConfigJSON
 }
 
 func main() {
 	srConf := serverConfig{done: make(chan struct{})}
 
-	path := flag.String("config", "configs/config.json", "path to .json which configurate our client")
+	path := flag.String("config", "configs/config.json", "path to .json which configurate our server")
 	flag.Parse()
 
-	srConf.init(*path)
+	if err := srConf.conf.Init(*path); err != nil {
+		log.Fatal("reading config error ", err)
+	}
 
-	log.Println("Trying to connect")
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", srConf.conf.Port))
+	log.Println("Trying to listen", srConf.conf.HostName, srConf.conf.Port, " by ", srConf.conf.Network)
+	lis, err := net.Listen(srConf.conf.Network, fmt.Sprintf("%s:%d", srConf.conf.HostName, srConf.conf.Port))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 		return
 	}
 	log.Println("Connected")
 
+	// Graceful Shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	s := grpc.NewServer()
 	pb.RegisterPubSubServer(s, NewServer())
+
+	go func() {
+
+		<-ctx.Done()
+
+		s.GracefulStop()
+		close(srConf.done)
+
+		s.Stop()
+
+		log.Println("Server finished!")
+	}()
 
 	log.Println("Server started!")
 
@@ -119,9 +120,4 @@ func main() {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 
-	// graceful stop by itself
-	s.GracefulStop()
-	close(srConf.done)
-
-	log.Println("Server finished!")
 }

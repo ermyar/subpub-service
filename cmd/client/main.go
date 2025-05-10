@@ -3,54 +3,31 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
+	utils "github.com/ermyar/subpub-service/cmd/utils"
 	pb "github.com/ermyar/subpub-service/pkg/api/subpub"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type client struct {
-	conf configJSON
-	// there maybe other param
-}
-
-type configJSON struct {
-	Port int `json:"port"`
-}
-
-func (c *client) readJSON(path string) (err error) {
-	var jsonFile []byte
-	jsonFile, err = os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(jsonFile, &c.conf)
-	return err
-}
-
-func (c *client) init(path string) error {
-	return c.readJSON(path)
-
-}
-
 func main() {
-	cc := client{}
+	config := utils.ConfigJSON{}
+
 	path := flag.String("config", "configs/config.json", "path to .json which configurate our client")
 	flag.Parse()
 
-	if err := cc.init(*path); err != nil {
+	if err := config.Init(*path); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("Creating Client")
+	log.Println("Creating Client on", config.HostName, config.Port)
 
-	conn, err := grpc.NewClient(fmt.Sprintf(":%d", cc.conf.Port),
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%d", config.HostName, config.Port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if err != nil {
@@ -72,6 +49,10 @@ func main() {
 
 		switch args[0] {
 		case "publish":
+			if len(args) != 3 {
+				log.Println("wrong args: must be 3")
+				continue
+			}
 			_, err := cli.Publish(context.Background(), &pb.PublishRequest{
 				Key:  args[1],
 				Data: args[2],
@@ -83,6 +64,10 @@ func main() {
 			}
 
 		case "subscribe":
+			if len(args) != 2 {
+				log.Println("wrong args: needs only 2 args")
+				continue
+			}
 			stream, err := cli.Subscribe(context.Background(), &pb.SubscribeRequest{
 				Key: args[1],
 			})
@@ -94,7 +79,7 @@ func main() {
 			log.Println("Subscribed succesfully")
 
 			// "demon" that receive our data
-			go func() {
+			go func(subscription string) {
 				for {
 					event, err := stream.Recv()
 
@@ -106,9 +91,11 @@ func main() {
 					data := event.GetData()
 
 					// output of our service
-					fmt.Printf("Received:\n%s\n", data)
+					fmt.Printf("Received from %s:\n%s\n", subscription, data)
 				}
-			}()
+			}(args[1])
+		default:
+			log.Println("wrong args")
 		}
 	}
 

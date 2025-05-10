@@ -2,7 +2,7 @@
 Publisher-Subcriber service.
 In first part was implemented `SubPub`package. This is simple bus that works on the principle `Publisher-Subscriber`. Testing is also enable.
 
-Then was implemented subscription service based on this bus. This is gRPC-service, `proto`-file located in `api/subpub`.
+Then was implemented in-memory subscription service based on this bus. This is gRPC-service, describing `proto`-file located in `api/subpub`.
 
 
 ## Installing dependencies 
@@ -19,7 +19,7 @@ To download required packages on Linux (Ubuntu) run follow
 
 ## Generate and build
 ```
-  make generate              # generate
+  make generate              # generate grpc files
   go build ./cmd/server/...  # build server
   go build ./cmd/client/...  # build client
 ```
@@ -41,3 +41,9 @@ Start service by running
   go run cmd/server/main.go  # run server
   go run cmd/client/main.go  # run client
 ```
+
+Server supports Graceful Shutdown.
+
+Client accepts 2 options (according to service description):
+- `publish` `"subs"` `"msg"`
+- `subscribe` `"subs"`
