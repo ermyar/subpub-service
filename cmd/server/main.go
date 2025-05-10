@@ -3,9 +3,12 @@ package main
 import (
 	// status "google. "
 	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
 	"log"
 	"net"
-	"sync"
+	"os"
 
 	subpub "github.com/ermyar/subpub-service/cmd/subpub"
 	pb "github.com/ermyar/subpub-service/pkg/api/subpub"
@@ -18,6 +21,10 @@ type server struct {
 
 	sp subpub.SubPub
 }
+
+var (
+	srConf serverConfig
+)
 
 func NewServer() *server {
 	return &server{sp: subpub.NewSubPub()}
@@ -37,9 +44,6 @@ func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeS
 	key := req.GetKey()
 	log.Println("Subscribe request!")
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-
 	_, err := s.sp.Subscribe(key, func(msg any) {
 		str, ok := (msg).(string)
 		if !ok {
@@ -49,23 +53,57 @@ func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeS
 		if err := stream.Send(&pb.Event{Data: str}); err != nil {
 			log.Println("MsgHandler send fault: ", err)
 		}
-		// wg.Done()
 		// we have no Unscribtion in out service
 		// if we have, we should exit from this func
 		// (then stream.ctx will closed and everything would fine)
 	})
 
-	log.Println("Subscribed with: ", err)
+	if err == nil {
+		log.Println("Subscribed succesfully")
+	} else {
+		log.Println("Subscribed with: ", err)
+	}
 
-	wg.Wait()
-	// have to hold this work, if we free, we cant send data..
+	<-srConf.done
+	// have to hold this work, if we free, we cant send data later..
 
 	return err
 }
 
+type serverConfig struct {
+	done chan struct{}
+	conf configJSON
+}
+
+// reading .json config
+type configJSON struct {
+	Port int `json:"port"`
+}
+
+func (c *serverConfig) readJSON(path string) (err error) {
+	var jsonFile []byte
+	jsonFile, err = os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(jsonFile, &c.conf)
+	return err
+}
+
+func (s *serverConfig) init(path string) error {
+	return s.readJSON(path)
+}
+
 func main() {
+	srConf := serverConfig{done: make(chan struct{})}
+
+	path := flag.String("config", "configs/config.json", "path to .json which configurate our client")
+	flag.Parse()
+
+	srConf.init(*path)
+
 	log.Println("Trying to connect")
-	lis, err := net.Listen("tcp", ":8080")
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", srConf.conf.Port))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 		return
@@ -81,8 +119,9 @@ func main() {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 
+	// graceful stop by itself
 	s.GracefulStop()
+	close(srConf.done)
 
 	log.Println("Server finished!")
-
 }

@@ -3,9 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
+	"encoding/json"
+	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -15,13 +15,48 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+type client struct {
+	conf configJSON
+	// there maybe other param
+}
+
+type configJSON struct {
+	Port int `json:"port"`
+}
+
+func (c *client) readJSON(path string) (err error) {
+	var jsonFile []byte
+	jsonFile, err = os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(jsonFile, &c.conf)
+	return err
+}
+
+func (c *client) init(path string) error {
+	return c.readJSON(path)
+
+}
+
 func main() {
+	cc := client{}
+	path := flag.String("config", "configs/config.json", "path to .json which configurate our client")
+	flag.Parse()
+
+	if err := cc.init(*path); err != nil {
+		log.Fatal(err)
+	}
+
 	log.Println("Creating Client")
 
-	conn, err := grpc.NewClient(":8080", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(fmt.Sprintf(":%d", cc.conf.Port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+
 	if err != nil {
 		log.Fatalln("Fault creating new client")
 	}
+
 	defer conn.Close()
 	log.Println("Created succesfully")
 
@@ -61,14 +96,10 @@ func main() {
 			// "demon" that receive our data
 			go func() {
 				for {
-
 					event, err := stream.Recv()
 
 					if err != nil {
-						if errors.Is(err, io.EOF) {
-							continue
-						}
-						log.Println(err)
+						log.Fatalln(err)
 						return
 					}
 
