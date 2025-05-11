@@ -98,7 +98,8 @@ func main() {
 
 					if err != nil {
 						if status.Code(err) == codes.Unavailable {
-							log.Fatalln(err)
+							log.Println(err)
+							return
 						}
 						if errors.Is(err, io.EOF) {
 							log.Println("Nothing to receive", err)

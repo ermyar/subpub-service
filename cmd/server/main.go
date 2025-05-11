@@ -51,7 +51,7 @@ func (s *server) Publish(_ context.Context, req *pb.PublishRequest) (*emptypb.Em
 
 func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeServer) error {
 	key := req.GetKey()
-	log.Println("Subscribe request!")
+	log.Printf("Subscribe request to %s!\n", key)
 
 	_, err := s.sp.Subscribe(key, func(msg any) {
 		str, ok := (msg).(string)
@@ -74,8 +74,8 @@ func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeS
 		return status.Error(codes.Internal, err.Error())
 	}
 
-	<-srConf.done
 	// have to hold this work, if we free, we cant send data later..
+	<-srConf.done
 
 	return nil
 }
