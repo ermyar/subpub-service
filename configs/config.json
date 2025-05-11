@@ -1,0 +1,5 @@
+{
+  "network": "tcp",
+  "port": 8080,
+  "hostname": "localhost"
+}
