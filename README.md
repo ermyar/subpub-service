@@ -20,8 +20,7 @@ To download required packages on Linux (Ubuntu) run follow
 ## Generate and build
 ```
   make generate              # generate grpc files
-  go build ./cmd/server/...  # build server
-  go build ./cmd/client/...  # build client
+  make build                 # build server&client in bin directory
 ```
 
 ### Test/Run
@@ -38,8 +37,10 @@ Server and client supports flags:
 
 Start service by running
 ```
-  go run cmd/server/main.go  # run server
-  go run cmd/client/main.go  # run client
+  go run ./cmd/server/...             # run server
+  ./bin/server --config [configPath]  # also running server
+  go run ./cmd/client/...             # run client
+  ./bin/client --config [configPath]  # also runnign client
 ```
 
 Server supports Graceful Shutdown.

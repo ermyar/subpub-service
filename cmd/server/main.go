@@ -15,6 +15,8 @@ import (
 	utils "github.com/ermyar/subpub-service/cmd/utils"
 	pb "github.com/ermyar/subpub-service/pkg/api/subpub"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -37,7 +39,12 @@ func (s *server) Publish(_ context.Context, req *pb.PublishRequest) (*emptypb.Em
 
 	log.Printf("received:\nkey: %v\ndata: %v\n", key, data)
 
-	s.sp.Publish(key, data)
+	err := s.sp.Publish(key, data)
+
+	if err != nil {
+		log.Println("Published with error: ", err)
+		return &emptypb.Empty{}, status.Error(codes.Internal, err.Error())
+	}
 
 	return &emptypb.Empty{}, nil
 }
@@ -64,12 +71,13 @@ func (s *server) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_SubscribeS
 		log.Println("Subscribed succesfully!")
 	} else {
 		log.Println("Subscribed with:", err)
+		return status.Error(codes.Internal, err.Error())
 	}
 
 	<-srConf.done
 	// have to hold this work, if we free, we cant send data later..
 
-	return err
+	return nil
 }
 
 type serverConfig struct {
@@ -99,19 +107,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// init new server
 	s := grpc.NewServer()
-	pb.RegisterPubSubServer(s, NewServer())
+	serv := NewServer()
+	pb.RegisterPubSubServer(s, serv)
 
 	go func() {
-
 		<-ctx.Done()
 
-		s.GracefulStop()
+		s.Stop() // can't use GracefulStop :(
 		close(srConf.done)
+		serv.sp.Close(context.Background())
 
-		s.Stop()
-
-		log.Println("Server finished!")
+		log.Println("Server finished gracefully!")
 	}()
 
 	log.Println("Server started!")

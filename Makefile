@@ -6,8 +6,8 @@ PKG_PROTO_PATH := $(CURDIR)/pkg
 
 PROTOC := PATH="$(PATH):$(LOCAL_BIN)" protoc
 
-.bin-deps: export GOBIN := $(LOCAL_BIN)
-.bin-deps:
+.bin_deps: export GOBIN := $(LOCAL_BIN)
+.bin_deps:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
@@ -19,4 +19,14 @@ PROTOC := PATH="$(PATH):$(LOCAL_BIN)" protoc
 .tidy:
 	go mod tidy
 
-generate: .bin-deps .protoc_generate .tidy
+# generating .pb files
+generate: .bin_deps .protoc_generate .tidy
+
+# building project
+build:
+	mkdir -p $(LOCAL_BIN)
+	go build -o $(LOCAL_BIN) ./cmd/client/...
+	go build -o $(LOCAL_BIN) ./cmd/server/...
+
+
+.PHONY: .bin_deps .protoc_generate generate .tidy
